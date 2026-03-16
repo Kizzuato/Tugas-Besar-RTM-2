@@ -50,7 +50,7 @@ def segment_color(hsv_plate):
     return mask_black, mask_white, mask_yellow, mask_red
 
 # Load gambar plat nomor
-img = cv.imread('projectPCD/data/platmerah.jpg')
+img = cv.imread('data/platmerah.jpg')
 
 # Prapengolahan
 # Normalisasi Cahaya
