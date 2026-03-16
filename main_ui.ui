@@ -97,7 +97,7 @@
     <item row="2" column="0" colspan="2">
      <widget class="QGroupBox" name="groupBox_Controls">
       <property name="title">
-       <string>Panel Operasi Perbaikan Kualitas Citra (Sesuai Tahapan Laporan)</string>
+       <string>Panel Operasi Perbaikan Kualitas Citra</string>
       </property>
       <layout class="QGridLayout" name="gridLayout_2">
        <item row="0" column="0">
@@ -184,7 +184,7 @@
     <item row="4" column="0" colspan="2">
      <widget class="QGroupBox" name="groupBox_Eksport">
       <property name="title">
-       <string>Eksport Fitur Respresentasi Data (Wajib Laporan Tugas II)</string>
+       <string>Eksport Fitur Respresentasi Data</string>
       </property>
       <layout class="QHBoxLayout" name="horizontalLayout_2">
        <item>

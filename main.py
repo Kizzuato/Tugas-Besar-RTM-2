@@ -21,7 +21,7 @@ def classify_color(mask_black, mask_white, mask_yellow, mask_red, mask_green):
     elif count_yellow > count_black and count_yellow > count_white and count_yellow > count_red and count_yellow > count_green:
         return "Kendaraan Umum"
     elif count_green > count_black and count_green > count_white and count_green > count_yellow and count_green > count_red:
-        return "Kendaraan Diplomatik"
+        return "Kendaraan Kawasan Khusus"
     else:
         return "Tidak Diketahui"
 
