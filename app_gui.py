@@ -12,6 +12,7 @@ class MainApp(QtWidgets.QMainWindow):
         
         # Variabel untuk menyimpan State Citra
         self.img_original = None
+        self.img_previous = None
         self.img_processed = None
         self.img_gray = None
         self.img_thresh = None
@@ -27,6 +28,7 @@ class MainApp(QtWidgets.QMainWindow):
         
         self.btn_export_txt.clicked.connect(self.export_txt)
         self.btn_export_csv.clicked.connect(self.export_csv)
+        self.btn_save_img.clicked.connect(self.save_image)
 
     def load_image(self):
         options = QtWidgets.QFileDialog.Options()
@@ -35,24 +37,29 @@ class MainApp(QtWidgets.QMainWindow):
         if file_name:
             self.img_original = cv.imread(file_name)
             self.img_processed = self.img_original.copy()
+            self.img_previous = self.img_original.copy()
             self.img_gray = None
             self.img_thresh = None
             self.display_image(self.img_original, self.label_citra_asli)
-            self.display_image(self.img_original, self.label_citra_hasil)
+            self.display_image(self.img_previous, self.label_citra_sebelumnya)
+            self.display_image(self.img_processed, self.label_citra_hasil)
             self.statusBar().showMessage(f"Loaded: {file_name}")
 
     def normalize_image(self):
         if self.img_original is not None:
+            self.img_previous = self.img_processed.copy() if self.img_processed is not None else None
             # Operasi Morfologi (Opening) & Aritmatika 
             kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (20, 20))
             img_opening = cv.morphologyEx(self.img_original, cv.MORPH_OPEN, kernel)
             self.img_processed = self.img_original - img_opening
             
+            self.display_image(self.img_previous, self.label_citra_sebelumnya)
             self.display_image(self.img_processed, self.label_citra_hasil)
             self.statusBar().showMessage("Normalisasi Cahaya Selesai")
 
     def apply_grayscale(self):
         if self.img_processed is not None:
+            self.img_previous = self.img_processed.copy()
             # Operasi Titik
             # Konversi Gambar ke Gray (Mencegah error jika gambar sudah gray)
             if len(self.img_processed.shape) == 3:
@@ -61,24 +68,29 @@ class MainApp(QtWidgets.QMainWindow):
                 self.img_gray = self.img_processed.copy()
             self.img_processed = self.img_gray.copy()
             
+            self.display_image(self.img_previous, self.label_citra_sebelumnya)
             self.display_image(self.img_processed, self.label_citra_hasil)
             self.statusBar().showMessage("Grayscale Selesai")
 
     def apply_threshold(self):
         if self.img_gray is not None:
+            self.img_previous = self.img_processed.copy()
             # Operasi Titik dengan Treshold Otsu
             _, self.img_processed = cv.threshold(self.img_gray, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
             self.img_thresh = self.img_processed.copy()
             
+            self.display_image(self.img_previous, self.label_citra_sebelumnya)
             self.display_image(self.img_processed, self.label_citra_hasil)
             self.statusBar().showMessage("Thresholding Otsu Selesai")
 
     def apply_edge_detection(self):
         if self.img_processed is not None:
+            self.img_previous = self.img_processed.copy()
             # Operasi Spasial : Edge Detection menggunakan filter Canny
             # Karena ini merupakan salah satu syarat "Menerapkan Edge Detection using derivative / filter" 
             self.img_processed = cv.Canny(self.img_processed, 100, 200)
             
+            self.display_image(self.img_previous, self.label_citra_sebelumnya)
             self.display_image(self.img_processed, self.label_citra_hasil)
             self.statusBar().showMessage("Deteksi Tepi (Edge Detection) Selesai")
 
@@ -101,6 +113,7 @@ class MainApp(QtWidgets.QMainWindow):
             if len(index_plate_candidate) == 0:
                 QtWidgets.QMessageBox.warning(self, "Peringatan", "Plat Nomor Tidak Terdeteksi di gambar ini.")
             else:
+                self.img_previous = self.img_processed.copy()
                 plate_candidate = max(index_plate_candidate, key=cv.contourArea)
                 x_plate, y_plate, w_plate, h_plate = cv.boundingRect(plate_candidate)
                 
@@ -111,6 +124,7 @@ class MainApp(QtWidgets.QMainWindow):
                 
                 # Potong Plat Nomor & Jadikan Gambar Proses
                 self.img_processed = self.img_original[y_plate:y_plate + h_plate, x_plate:x_plate + w_plate]
+                self.display_image(self.img_previous, self.label_citra_sebelumnya)
                 self.display_image(self.img_processed, self.label_citra_hasil)
                 self.statusBar().showMessage("Deteksi & Crop Plat Berhasil.")
 
@@ -172,6 +186,19 @@ class MainApp(QtWidgets.QMainWindow):
             self.statusBar().showMessage("Proses Klasifikasi Selesai!")
         else:
              QtWidgets.QMessageBox.warning(self, "Informasi", "Pastikan gambar yang di-crop adalah plat (RGB/BGR), agar bisa dikonversi warnanya.")
+
+    def save_image(self):
+        if self.img_processed is not None:
+            options = QtWidgets.QFileDialog.Options()
+            file_name, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Simpan Gambar Hasil", "", "JPG (*.jpg);;PNG (*.png);;BMP (*.bmp);;All Files (*)", options=options)
+            if file_name:
+                # Cek apakah user menulis ekstensi, jika tidak default ke .jpg
+                if not file_name.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
+                    file_name += '.jpg'
+                cv.imwrite(file_name, self.img_processed)
+                QtWidgets.QMessageBox.information(self, "Berhasil", f"Gambar berhasil disimpan di {file_name}")
+        else:
+            QtWidgets.QMessageBox.warning(self, "Peringatan", "Tidak ada gambar hasil untuk disimpan.")
 
     def export_txt(self):
         if self.img_processed is not None:
