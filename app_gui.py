@@ -1,7 +1,13 @@
 import sys
+import os
+
+os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH", None)
+os.environ["QT_QPA_PLATFORM"] = "xcb"
 import cv2 as cv
 import numpy as np
 import pandas as pd
+import easyocr
+import re
 from PyQt5 import QtWidgets, uic, QtGui, QtCore
 
 class MainApp(QtWidgets.QMainWindow):
@@ -22,13 +28,19 @@ class MainApp(QtWidgets.QMainWindow):
         self.btn_normalisasi.clicked.connect(self.normalize_image)
         self.btn_grayscale.clicked.connect(self.apply_grayscale)
         self.btn_threshold.clicked.connect(self.apply_threshold)
-        self.btn_edge.clicked.connect(self.apply_edge_detection)
         self.btn_deteksi.clicked.connect(self.detect_plate)
         self.btn_segmentasi.clicked.connect(self.segment_and_classify)
+        
+        # Sembunyikan tombol Canny dari GUI karena tidak diperlukan
+        self.btn_edge.hide()
         
         self.btn_export_txt.clicked.connect(self.export_txt)
         self.btn_export_csv.clicked.connect(self.export_csv)
         self.btn_save_img.clicked.connect(self.save_image)
+        
+        # Inisialisasi OCR model
+        self.reader = easyocr.Reader(['id'], gpu=False)
+        self.label_hasil_klasifikasi.setWordWrap(True)
 
     def load_image(self):
         options = QtWidgets.QFileDialog.Options()
@@ -48,14 +60,26 @@ class MainApp(QtWidgets.QMainWindow):
     def normalize_image(self):
         if self.img_original is not None:
             self.img_previous = self.img_processed.copy() if self.img_processed is not None else None
-            # Operasi Morfologi (Opening) & Aritmatika 
-            kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (20, 20))
-            img_opening = cv.morphologyEx(self.img_original, cv.MORPH_OPEN, kernel)
-            self.img_processed = self.img_original - img_opening
+            
+            # Analisis kecerahan rata-rata citra grayscale
+            gray = cv.cvtColor(self.img_original, cv.COLOR_BGR2GRAY)
+            mean_val = np.mean(gray)
+            
+            # Deteksi Tipe Plat Adaptif:
+            # Plat putih/kondisi siang terang (mean_val > 95) tidak boleh dikurangi Morfologi Opening
+            # karena akan merusak latar belakang putih plat. Cukup biarkan asli agar binarisasi Otsu bekerja sempurna.
+            if mean_val > 95:
+                self.img_processed = self.img_original.copy()
+                self.statusBar().showMessage("Normalisasi: Plat Putih Terdeteksi (Asli Dipertahankan)")
+            else:
+                # Plat hitam/kondisi gelap: Gunakan pengurangan Opening (Top-Hat) untuk menonjolkan teks putih
+                kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (20, 20))
+                img_opening = cv.morphologyEx(self.img_original, cv.MORPH_OPEN, kernel)
+                self.img_processed = self.img_original - img_opening
+                self.statusBar().showMessage("Normalisasi: Plat Hitam Terdeteksi (Top-Hat Opening Selesai)")
             
             self.display_image(self.img_previous, self.label_citra_sebelumnya)
             self.display_image(self.img_processed, self.label_citra_hasil)
-            self.statusBar().showMessage("Normalisasi Cahaya Selesai")
 
     def apply_grayscale(self):
         if self.img_processed is not None:
@@ -83,31 +107,27 @@ class MainApp(QtWidgets.QMainWindow):
             self.display_image(self.img_processed, self.label_citra_hasil)
             self.statusBar().showMessage("Thresholding Otsu Selesai")
 
-    def apply_edge_detection(self):
-        if self.img_processed is not None:
-            self.img_previous = self.img_processed.copy()
-            # Operasi Spasial : Edge Detection menggunakan filter Canny
-            # Karena ini merupakan salah satu syarat "Menerapkan Edge Detection using derivative / filter" 
-            self.img_processed = cv.Canny(self.img_processed, 100, 200)
-            
-            self.display_image(self.img_previous, self.label_citra_sebelumnya)
-            self.display_image(self.img_processed, self.label_citra_hasil)
-            self.statusBar().showMessage("Deteksi Tepi (Edge Detection) Selesai")
+
 
     def detect_plate(self):
-        # Di main.py, contours dicari dari hasil Threshold Otsu (bukan dari edge detection).
-        # Maka kita prioritas gunakan citra thresholded jika ada.
-        img_for_detection = self.img_thresh if self.img_thresh is not None else self.img_processed
+        # Deteksi plat harus menggunakan hasil binarisasi Threshold Otsu
+        if self.img_thresh is None:
+            QtWidgets.QMessageBox.warning(self, "Peringatan", "Silakan jalankan langkah 4. Thresholding terlebih dahulu!")
+            return
 
-        if img_for_detection is not None and self.img_original is not None:
+        if self.img_thresh is not None and self.img_original is not None:
             # Menggunakan Kontur untuk melokalisasi bentuk Persegi Plat
-            contours_vehicle, _ = cv.findContours(img_for_detection, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+            contours_vehicle, _ = cv.findContours(self.img_thresh, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
             
+            img_h, img_w = self.img_original.shape[:2]
             index_plate_candidate = []
             for contour_vehicle in contours_vehicle:
                 x, y, w, h = cv.boundingRect(contour_vehicle)
                 aspect_ratio = w / h
-                if w >= 200 and aspect_ratio <= 4:
+                # Filter plat nomor Indonesia yang realistis:
+                # 1. Rasio aspek mendatar (antara 2.0 hingga 4.5 - Rasio plat asli ~3.4)
+                # 2. Lebar minimal 150 piksel dan tidak boleh mendominasi seluruh gambar (maksimal 85% lebar/tinggi gambar)
+                if 2.0 <= aspect_ratio <= 4.5 and 150 <= w <= (0.85 * img_w) and h <= (0.85 * img_h):
                     index_plate_candidate.append(contour_vehicle)
             
             if len(index_plate_candidate) == 0:
@@ -172,17 +192,55 @@ class MainApp(QtWidgets.QMainWindow):
         else:
             return "Tidak Diketahui"
 
+    def parse_plate_text(self, text):
+        text = re.sub(r'[^A-Z0-9]', '', text.upper())
+        match = re.search(r'([A-Z]{1,2})(\d{1,4})([A-Z]{0,3})', text)
+        if match:
+            return match.group(1), int(match.group(2)), match.group(3)
+        angka_match = re.search(r'(\d{1,4})', text)
+        if angka_match:
+            return None, int(angka_match.group(1)), None
+        return None, None, None
+
+    def classify_by_number(self, angka):
+        if angka is None:
+            return "Tidak Diketahui (Angka tidak terbaca)"
+        
+        if 1 <= angka <= 2999:
+            return "Kendaraan Penumpang"
+        elif 3000 <= angka <= 6999:
+            return "Sepeda Motor"
+        elif 7000 <= angka <= 7999:
+            return "Bus"
+        elif 8000 <= angka <= 8999:
+            return "Kendaraan Penumpang / Barang"
+        elif 9000 <= angka <= 9999:
+            return "Kendaraan Pengangkut Beban / Truk"
+        else:
+            return "Tidak Diketahui"
+
     def segment_and_classify(self):
         if self.img_processed is not None and len(self.img_processed.shape) == 3:
+            # --- OCR PROSES ---
+            ocr_result = self.reader.readtext(self.img_processed, detail=0)
+            plate_text = "".join(ocr_result)
+            
+            _, angka, _ = self.parse_plate_text(plate_text)
+            kelas_ocr = self.classify_by_number(angka)
+
+            # --- COLOR SEGMENTATION PROSES ---
             # Konversi Gambar crop plat ke hsv
             hsv_plate = cv.cvtColor(self.img_processed, cv.COLOR_BGR2HSV)
             
             # Segmentasi dan klasifikasi (logika dari main.py ditanam ke class)
             mask_black, mask_white, mask_yellow, mask_red, mask_green = self.segment_color(hsv_plate)
-            kelas = self.classify_color(mask_black, mask_white, mask_yellow, mask_red, mask_green)
+            kelas_warna = self.classify_color(mask_black, mask_white, mask_yellow, mask_red, mask_green)
             
             # Tampilkan ke GUI Stringnya
-            self.label_hasil_klasifikasi.setText(f"Kategori Kendaraan: {kelas}")
+            hasil_teks = (f"Plat Terbaca: {plate_text}\n"
+                          f"Jenis (Regulasi Angka): {kelas_ocr}\n"
+                          f"Kategori (Warna): {kelas_warna}")
+            self.label_hasil_klasifikasi.setText(hasil_teks)
             self.statusBar().showMessage("Proses Klasifikasi Selesai!")
         else:
              QtWidgets.QMessageBox.warning(self, "Informasi", "Pastikan gambar yang di-crop adalah plat (RGB/BGR), agar bisa dikonversi warnanya.")
