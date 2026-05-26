@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Aplikasi Deteksi dan Klasifikasi Warna Plat Nomor - PCD ITENAS</string>
+   <string>Sistem Deteksi Karakter Plat Nomor untuk Klasifikasi Jenis Kendaraan - PCD ITENAS</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QGridLayout" name="gridLayout">
@@ -25,7 +25,7 @@
        </font>
       </property>
       <property name="text">
-       <string>Sistem Perbaikan Citra dan Deteksi Plat Warna Kendaraan</string>
+       <string>Sistem Perbaikan Citra dan Deteksi Karakter Plat Nomor Kendaraan</string>
       </property>
       <property name="alignment">
        <set>Qt::AlignCenter</set>
@@ -179,13 +179,13 @@
     <item row="3" column="0" colspan="2">
      <widget class="QGroupBox" name="groupBox_Hasil_Akhir">
       <property name="title">
-       <string>Segmentasi Warna &amp; Klasifikasi Data</string>
+       <string>Segmentasi Karakter &amp; Klasifikasi Kendaraan</string>
       </property>
       <layout class="QHBoxLayout" name="horizontalLayout">
        <item>
         <widget class="QPushButton" name="btn_segmentasi">
          <property name="text">
-          <string>7. Jalankan Segmentasi Warna &amp; Klasifikasi</string>
+          <string>7. Jalankan Deteksi Karakter &amp; Klasifikasi</string>
          </property>
         </widget>
        </item>

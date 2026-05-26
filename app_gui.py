@@ -31,8 +31,9 @@ class MainApp(QtWidgets.QMainWindow):
         self.btn_deteksi.clicked.connect(self.detect_plate)
         self.btn_segmentasi.clicked.connect(self.segment_and_classify)
         
-        # Sembunyikan tombol Canny dari GUI karena tidak diperlukan
-        self.btn_edge.hide()
+        # Tampilkan tombol Canny dari GUI untuk eksperimen pembanding
+        self.btn_edge.show()
+        self.btn_edge.clicked.connect(self.apply_canny_edge)
         
         self.btn_export_txt.clicked.connect(self.export_txt)
         self.btn_export_csv.clicked.connect(self.export_csv)
@@ -108,6 +109,18 @@ class MainApp(QtWidgets.QMainWindow):
             self.display_image(self.img_processed, self.label_citra_hasil)
             self.statusBar().showMessage("Thresholding Otsu Selesai")
 
+    def apply_canny_edge(self):
+        # PENTING: Canny digunakan sebagai metode pembanding eksperimen, bukan metode utama.
+        # Pipeline utama tetap segmentasi karakter + LBP + template matching.
+        if self.img_processed is not None:
+            from canny_comparison import process_canny
+            self.img_previous = self.img_processed.copy()
+            edges = process_canny(self.img_processed)
+            if edges is not None:
+                self.img_processed = cv.cvtColor(edges, cv.COLOR_GRAY2BGR)
+                self.display_image(self.img_previous, self.label_citra_sebelumnya)
+                self.display_image(self.img_processed, self.label_citra_hasil)
+                self.statusBar().showMessage("Canny Edge (Pembanding) Selesai. Lanjutkan ke Deteksi Plat jika ini crop plat, dsb.")
 
 
     def detect_plate(self):
@@ -223,43 +236,50 @@ class MainApp(QtWidgets.QMainWindow):
 
     def segment_and_classify(self):
         if self.img_processed is not None and len(self.img_processed.shape) == 3:
-            # --- CHARACTER SEGMENTATION (BARU) ---
+            from plate_processor import process_plate_image
+            
+            result = process_plate_image(self.img_processed)
+            
+            if not result["success"]:
+                QtWidgets.QMessageBox.warning(self, "Peringatan", result["message"])
+                return
+                
+            detected_text = result.get("detected_text", "")
+            detected_letters = result.get("detected_letters", "")
+            reg_num = result.get("registration_number", "")
+            v_type = result.get("vehicle_type", "")
+            w_cat = result.get("wheel_category", "")
+            status_msg = result.get("message", "")
+            
+            # --- COLOR SEGMENTATION PROSES (LEGACY) ---
+            # Tetap dijalankan tapi hanya sebagai info tambahan opsional
             try:
-                from character_segmentation import segment_characters, save_segmented_characters
-                chars, char_thresh = segment_characters(self.img_processed)
-                if chars:
-                    save_segmented_characters(chars, "output/characters")
-                    status_segmen = f"Berhasil ({len(chars)} karakter disimpan ke output/characters)"
-                else:
-                    status_segmen = "Gagal (0 karakter ditemukan)"
-            except Exception as e:
-                status_segmen = f"Error ({e})"
-
-            # --- OCR PROSES (LEGACY/DINONAKTIFKAN) ---
-            # ocr_result = self.reader.readtext(self.img_processed, detail=0)
-            # plate_text = "".join(ocr_result)
-            plate_text = "N/A (OCR Dinonaktifkan)"
+                hsv_plate = cv.cvtColor(self.img_processed, cv.COLOR_BGR2HSV)
+                mask_black, mask_white, mask_yellow, mask_red, mask_green = self.segment_color(hsv_plate)
+                kelas_warna = self.classify_color(mask_black, mask_white, mask_yellow, mask_red, mask_green)
+            except Exception:
+                kelas_warna = "Gagal (Legacy)"
             
-            _, angka, _ = self.parse_plate_text(plate_text)
-            kelas_ocr = self.classify_by_number(angka)
-
-            # --- COLOR SEGMENTATION PROSES ---
-            # Konversi Gambar crop plat ke hsv
-            hsv_plate = cv.cvtColor(self.img_processed, cv.COLOR_BGR2HSV)
+            hasil_teks = (f"Teks Plat : {detected_text}\n"
+                          f"Angka Reg : {reg_num}\n"
+                          f"Huruf Seri: {detected_letters}\n"
+                          f"Jenis Kendaraan : {v_type}\n"
+                          f"Kategori Roda   : {w_cat}\n"
+                          f"Status          : {status_msg}\n\n"
+                          f"(Legacy) Warna  : {kelas_warna}")
             
-            # Segmentasi dan klasifikasi (logika dari main.py ditanam ke class)
-            mask_black, mask_white, mask_yellow, mask_red, mask_green = self.segment_color(hsv_plate)
-            kelas_warna = self.classify_color(mask_black, mask_white, mask_yellow, mask_red, mask_green)
-            
-            # Tampilkan ke GUI Stringnya
-            hasil_teks = (f"Plat Terbaca: {plate_text}\n"
-                          f"Jenis (Regulasi Angka): {kelas_ocr}\n"
-                          f"Kategori (Warna): {kelas_warna}\n"
-                          f"Status Segmentasi: {status_segmen}")
             self.label_hasil_klasifikasi.setText(hasil_teks)
-            self.statusBar().showMessage("Proses Klasifikasi Selesai!")
+            self.statusBar().showMessage("Proses Karakter & Klasifikasi Selesai!")
+            
+            # Tampilkan gambar threshold karakter sebagai hasil akhir
+            if result.get("threshold") is not None:
+                self.img_previous = self.img_processed.copy()
+                self.img_processed = cv.cvtColor(result["threshold"], cv.COLOR_GRAY2BGR)
+                self.display_image(self.img_previous, self.label_citra_sebelumnya)
+                self.display_image(self.img_processed, self.label_citra_hasil)
+                
         else:
-             QtWidgets.QMessageBox.warning(self, "Informasi", "Pastikan gambar yang di-crop adalah plat (RGB/BGR), agar bisa dikonversi warnanya.")
+             QtWidgets.QMessageBox.warning(self, "Informasi", "Pastikan gambar yang di-crop adalah plat (RGB/BGR).")
 
     def save_image(self):
         if self.img_processed is not None:
