@@ -6,7 +6,7 @@ os.environ["QT_QPA_PLATFORM"] = "xcb"
 import cv2 as cv
 import numpy as np
 import pandas as pd
-import easyocr
+# import easyocr # DILARANG: Sesuai aturan project baru, tidak boleh menggunakan OCR siap pakai
 import re
 from PyQt5 import QtWidgets, uic, QtGui, QtCore
 
@@ -39,7 +39,8 @@ class MainApp(QtWidgets.QMainWindow):
         self.btn_save_img.clicked.connect(self.save_image)
         
         # Inisialisasi OCR model
-        self.reader = easyocr.Reader(['id'], gpu=False)
+        # self.reader = easyocr.Reader(['id'], gpu=False) # LEGACY: dilarang
+        self.reader = None
         self.label_hasil_klasifikasi.setWordWrap(True)
 
     def load_image(self):
@@ -148,6 +149,7 @@ class MainApp(QtWidgets.QMainWindow):
                 self.display_image(self.img_processed, self.label_citra_hasil)
                 self.statusBar().showMessage("Deteksi & Crop Plat Berhasil.")
 
+    # LEGACY: Fungsi berbasis warna tidak lagi digunakan sebagai metode utama (rentan manipulasi)
     def segment_color(self, hsv_plate):
         lower_black = np.array([0, 0, 0])
         upper_black = np.array([180, 255, 30])
@@ -221,9 +223,22 @@ class MainApp(QtWidgets.QMainWindow):
 
     def segment_and_classify(self):
         if self.img_processed is not None and len(self.img_processed.shape) == 3:
-            # --- OCR PROSES ---
-            ocr_result = self.reader.readtext(self.img_processed, detail=0)
-            plate_text = "".join(ocr_result)
+            # --- CHARACTER SEGMENTATION (BARU) ---
+            try:
+                from character_segmentation import segment_characters, save_segmented_characters
+                chars, char_thresh = segment_characters(self.img_processed)
+                if chars:
+                    save_segmented_characters(chars, "output/characters")
+                    status_segmen = f"Berhasil ({len(chars)} karakter disimpan ke output/characters)"
+                else:
+                    status_segmen = "Gagal (0 karakter ditemukan)"
+            except Exception as e:
+                status_segmen = f"Error ({e})"
+
+            # --- OCR PROSES (LEGACY/DINONAKTIFKAN) ---
+            # ocr_result = self.reader.readtext(self.img_processed, detail=0)
+            # plate_text = "".join(ocr_result)
+            plate_text = "N/A (OCR Dinonaktifkan)"
             
             _, angka, _ = self.parse_plate_text(plate_text)
             kelas_ocr = self.classify_by_number(angka)
@@ -239,7 +254,8 @@ class MainApp(QtWidgets.QMainWindow):
             # Tampilkan ke GUI Stringnya
             hasil_teks = (f"Plat Terbaca: {plate_text}\n"
                           f"Jenis (Regulasi Angka): {kelas_ocr}\n"
-                          f"Kategori (Warna): {kelas_warna}")
+                          f"Kategori (Warna): {kelas_warna}\n"
+                          f"Status Segmentasi: {status_segmen}")
             self.label_hasil_klasifikasi.setText(hasil_teks)
             self.statusBar().showMessage("Proses Klasifikasi Selesai!")
         else:

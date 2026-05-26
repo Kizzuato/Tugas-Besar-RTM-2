@@ -81,7 +81,7 @@ def test_image(image_path):
     
     return result
 
-data_dir = '/home/kizzu/Kuliah/PCD/Tubes/projectPCD/data'
+data_dir = 'data'
 files = [f for f in os.listdir(data_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
 files.sort()
 
