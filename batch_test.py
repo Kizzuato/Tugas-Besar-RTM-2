@@ -1,93 +1,96 @@
-import cv2 as cv
-import numpy as np
 import os
+import cv2 as cv
+import pandas as pd
+from plate_processor import process_plate_image
 
-def segment_color(hsv_plate):
-    lower_black = np.array([0, 0, 0])
-    upper_black = np.array([180, 255, 30])
-    lower_white = np.array([0, 0, 200])
-    upper_white = np.array([180, 30, 255])
-    lower_yellow = np.array([20, 100, 100])
-    upper_yellow = np.array([40, 255, 255])
-    lower_red1 = np.array([0, 100, 100])
-    upper_red1 = np.array([10, 255, 255])
-    lower_red2 = np.array([160, 100, 100])
-    upper_red2 = np.array([180, 255, 255])
-    lower_green = np.array([40, 40, 40])
-    upper_green = np.array([80, 255, 255])
+def run_batch_test(data_dir='data', output_file='output/batch_results.csv'):
+    if not os.path.exists(data_dir):
+        print(f"Error: Folder '{data_dir}' tidak ditemukan. Pastikan Anda memiliki gambar di dalam folder ini.")
+        return
 
-    mask_black = cv.inRange(hsv_plate, lower_black, upper_black)
-    mask_white = cv.inRange(hsv_plate, lower_white, upper_white)
-    mask_yellow = cv.inRange(hsv_plate, lower_yellow, upper_yellow)
-    mask_red1 = cv.inRange(hsv_plate, lower_red1, upper_red1)
-    mask_red2 = cv.inRange(hsv_plate, lower_red2, upper_red2)
-    mask_red = cv.bitwise_or(mask_red1, mask_red2)
-    mask_green = cv.inRange(hsv_plate, lower_green, upper_green)
+    # Pastikan folder output ada
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
-    return mask_black, mask_white, mask_yellow, mask_red, mask_green
-
-def classify_color(mask_black, mask_white, mask_yellow, mask_red, mask_green):
-    count_black = cv.countNonZero(mask_black)
-    count_white = cv.countNonZero(mask_white)
-    count_yellow = cv.countNonZero(mask_yellow)
-    count_red = cv.countNonZero(mask_red)
-    count_green = cv.countNonZero(mask_green)
-
-    if count_red > count_black and count_red > count_white and count_red > count_yellow and count_red > count_green:
-        return "Kendaraan Pemerintah"
-    elif count_black > count_white and count_black > count_yellow and count_black > count_red and count_black > count_green:
-        return "Kendaraan Pribadi"
-    elif count_white > count_black and count_white > count_yellow and count_white > count_red and count_white > count_green:
-        return "Kendaraan Pribadi"
-    elif count_yellow > count_black and count_yellow > count_white and count_yellow > count_red and count_yellow > count_green:
-        return "Kendaraan Umum"
-    elif count_green > count_black and count_green > count_white and count_green > count_yellow and count_green > count_red:
-        return "Kendaraan Diplomatik"
-    else:
-        return "Tidak Diketahui"
-
-def test_image(image_path):
-    img = cv.imread(image_path)
-    if img is None:
-        return "Error: Image not found"
-
-    # Pre-processing
-    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (20, 20))
-    img_opening = cv.morphologyEx(img, cv.MORPH_OPEN, kernel)
-    img_norm = img - img_opening
-    img_gray = cv.cvtColor(img_norm, cv.COLOR_BGR2GRAY)
-    _, img_thresh = cv.threshold(img_gray, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
-
-    # Detection
-    contours_vehicle, _ = cv.findContours(img_thresh, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
-    index_plate_candidate = []
-    for contour_vehicle in contours_vehicle:
-        x, y, w, h = cv.boundingRect(contour_vehicle)
-        aspect_ratio = w / h
-        if w >= 200 and aspect_ratio <= 4:
-            index_plate_candidate.append(contour_vehicle)
-
-    if len(index_plate_candidate) == 0:
-        return "Plat nomor tidak ditemukan"
+    files = [f for f in os.listdir(data_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp'))]
     
-    plate_candidate = max(index_plate_candidate, key=cv.contourArea)
-    x_p, y_p, w_p, h_p = cv.boundingRect(plate_candidate)
-    cropped_img = img[y_p:y_p + h_p, x_p:x_p + w_p]
-
-    # Classification
-    hsv_plate = cv.cvtColor(cropped_img, cv.COLOR_BGR2HSV)
-    masks = segment_color(hsv_plate)
-    result = classify_color(*masks)
+    if not files:
+        print(f"Tidak ada gambar di dalam folder '{data_dir}'.")
+        return
+        
+    results = []
     
-    return result
+    print(f"Memulai batch testing untuk {len(files)} gambar...")
+    
+    for filename in files:
+        file_path = os.path.join(data_dir, filename)
+        img = cv.imread(file_path)
+        
+        if img is None:
+            print(f"[-] {filename}: Gagal membaca gambar.")
+            results.append({
+                "Nama File": filename,
+                "Angka Terdeteksi": "",
+                "Huruf Terdeteksi": "",
+                "Nomor Registrasi": "",
+                "Jenis Kendaraan": "",
+                "Kategori Roda": "",
+                "Status": "Gagal",
+                "Pesan": "Gagal membaca gambar"
+            })
+            continue
+            
+        print(f"Memproses {filename}...")
+        
+        # Asumsi untuk batch testing, karena process_plate_image butuh crop plat,
+        # kita lakukan crop sederhana secara otomatis jika belum di-crop.
+        # Simulasi deteksi plat sederhana (berdasarkan kontur atau asumsi gambar sudah crop).
+        # Agar robust, kita ubah ke grayscale, otsu, lalu cari kontur terbesar.
+        # Jika gambar sudah berupa crop plat, dia akan memproses keseluruhan gambar.
+        
+        # Simulasikan crop sederhana
+        gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+        _, thresh = cv.threshold(gray, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+        contours, _ = cv.findContours(thresh, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+        
+        plate_crop = img
+        if contours:
+            # Filter yang mungkin berupa plat
+            plate_candidate = max(contours, key=cv.contourArea)
+            x, y, w, h = cv.boundingRect(plate_candidate)
+            if 150 <= w <= (0.85 * img.shape[1]) and h <= (0.85 * img.shape[0]):
+                plate_crop = img[y:y+h, x:x+w]
+        
+        result = process_plate_image(plate_crop)
+        
+        if result["success"]:
+            results.append({
+                "Nama File": filename,
+                "Angka Terdeteksi": result.get("detected_digits", ""),
+                "Huruf Terdeteksi": result.get("detected_letters", ""),
+                "Nomor Registrasi": result.get("registration_number", ""),
+                "Jenis Kendaraan": result.get("vehicle_type", ""),
+                "Kategori Roda": result.get("wheel_category", ""),
+                "Status": "Berhasil",
+                "Pesan": result.get("message", "")
+            })
+            print(f"[+] {filename}: {result.get('registration_number', '-')} -> {result.get('vehicle_type', '-')}")
+        else:
+            results.append({
+                "Nama File": filename,
+                "Angka Terdeteksi": "",
+                "Huruf Terdeteksi": "",
+                "Nomor Registrasi": "",
+                "Jenis Kendaraan": "",
+                "Kategori Roda": "",
+                "Status": "Gagal",
+                "Pesan": result.get("message", "")
+            })
+            print(f"[-] {filename}: {result.get('message', 'Gagal memproses.')}")
+            
+    # Simpan hasil ke CSV
+    df = pd.DataFrame(results)
+    df.to_csv(output_file, index=False)
+    print(f"\nBatch testing selesai. Hasil disimpan di '{output_file}'.")
 
-data_dir = 'data'
-files = [f for f in os.listdir(data_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
-files.sort()
-
-print(f"{'Filename':<20} | {'Result':<25}")
-print("-" * 50)
-for filename in files:
-    path = os.path.join(data_dir, filename)
-    res = test_image(path)
-    print(f"{filename:<20} | {res:<25}")
+if __name__ == "__main__":
+    run_batch_test()
