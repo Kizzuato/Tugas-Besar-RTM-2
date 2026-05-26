@@ -223,6 +223,18 @@ class MainApp(QtWidgets.QMainWindow):
 
     def segment_and_classify(self):
         if self.img_processed is not None and len(self.img_processed.shape) == 3:
+            # --- CHARACTER SEGMENTATION (BARU) ---
+            try:
+                from character_segmentation import segment_characters, save_segmented_characters
+                chars, char_thresh = segment_characters(self.img_processed)
+                if chars:
+                    save_segmented_characters(chars, "output/characters")
+                    status_segmen = f"Berhasil ({len(chars)} karakter disimpan ke output/characters)"
+                else:
+                    status_segmen = "Gagal (0 karakter ditemukan)"
+            except Exception as e:
+                status_segmen = f"Error ({e})"
+
             # --- OCR PROSES (LEGACY/DINONAKTIFKAN) ---
             # ocr_result = self.reader.readtext(self.img_processed, detail=0)
             # plate_text = "".join(ocr_result)
@@ -242,7 +254,8 @@ class MainApp(QtWidgets.QMainWindow):
             # Tampilkan ke GUI Stringnya
             hasil_teks = (f"Plat Terbaca: {plate_text}\n"
                           f"Jenis (Regulasi Angka): {kelas_ocr}\n"
-                          f"Kategori (Warna): {kelas_warna}")
+                          f"Kategori (Warna): {kelas_warna}\n"
+                          f"Status Segmentasi: {status_segmen}")
             self.label_hasil_klasifikasi.setText(hasil_teks)
             self.statusBar().showMessage("Proses Klasifikasi Selesai!")
         else:
