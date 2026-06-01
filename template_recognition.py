@@ -298,53 +298,21 @@ def recognize_plate_characters(character_images, plate_bbox=None, include_letter
             "success": char != "?"
         })
         
-    # --- STRATEGI CLUSTERING TENGAH (KHUSUS INDONESIA) ---
-    # Kita hanya ingin cluster angka yang berada di tengah.
-    digit_candidates = [d for d in details if d["character"].isdigit()]
+    detected_text = ""
+    detected_digits = ""
+    detected_letters = ""
     
-    if len(digit_candidates) > 4 and plate_bbox and plate_bbox.get("w"):
-        plate_width_ref = plate_bbox["w"]
-        
-        # Calculate overall plate center (relative to the cropped plate's width)
-        plate_center_x_relative_to_crop = plate_width_ref / 2
-        
-        for d in digit_candidates:
-            if d["bbox"]:
-                # Character center relative to the cropped plate
-                char_center_x_relative_to_crop = d["bbox"][0] + (d["bbox"][2] / 2)
-                
-                # Distance of character center to plate center (absolute pixels)
-                dist_to_plate_center = abs(char_center_x_relative_to_crop - plate_center_x_relative_to_crop)
-                
-                # Normalize distance (0.0 - 1.0) relative to half plate width
-                # Max distance from center is half plate width
-                normalized_dist = dist_to_plate_center / (plate_width_ref / 2) 
-                
-                # Spatial score: closer to center, higher score.
-                # Factor 5.0 penalizes heavily if far from center
-                spatial_score = 1.0 / (1.0 + normalized_dist * 5.0) 
-                
-                # Combined score: Confidence (0.4) + Spatial Centrality (0.6)
-                d["combined_priority"] = (d["score"] * 0.4) + (spatial_score * 0.6)
+    for d in details:
+        char = d["character"]
+        if char != "?": # Hanya tambahkan karakter yang dikenali
+            detected_text += char
+            if char.isdigit():
+                detected_digits += char
             else:
-                # If no bbox, assign a lower priority based only on confidence
-                d["combined_priority"] = d["score"] * 0.4 
-        
-        # Sort by combined priority and take the top 4
-        digit_candidates.sort(key=lambda x: x.get("combined_priority", 0), reverse=True)
-        top_4_digits = digit_candidates[:4]
-    else:
-        # If <= 4 candidates or no plate_bbox, use all digit candidates
-        top_4_digits = digit_candidates
-
-    # Urutkan kembali dari kiri ke kanan (Posisi X)
-    top_4_digits.sort(key=lambda x: x["bbox"][0] if x["bbox"] else 0)
+                detected_letters += char
     
-    detected_digits = "".join([d["character"] for d in top_4_digits])
-    detected_text = detected_digits
-    
-    success = len(detected_digits) > 0
-    message = f"Angka terdeteksi (Top 4): {detected_digits}" if success else "Tidak ada angka valid ditemukan."
+    success = len(detected_text) > 0
+    message = "Pengenalan selesai." if success else "Tidak ada satupun karakter yang berhasil dikenali dengan yakin."
     
     return {
         "success": success,
