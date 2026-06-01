@@ -12,7 +12,7 @@ def process_plate_image(plate_crop):
         return {"success": False, "message": "Gambar plat kosong."}
         
     # 1. Segmentasi Karakter
-    chars, char_thresh = segment_characters(plate_crop)
+    chars, char_thresh, stages = segment_characters(plate_crop)
     if not chars:
         return {"success": False, "message": "Karakter gagal disegmentasi dari plat. Pastikan gambar jelas."}
         

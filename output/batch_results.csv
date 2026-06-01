@@ -1,0 +1,7 @@
+Nama File,Angka Terdeteksi,Huruf Terdeteksi,Nomor Registrasi,Jenis Kendaraan,Kategori Roda,Status,Pesan
+plathijau.png,,,,,,Gagal,Karakter gagal disegmentasi dari plat. Pastikan gambar jelas.
+mobil_sipil.png,7,,7,Mobil Penumpang,Roda 4,Berhasil,Klasifikasi berhasil.
+mobil_sipil2.png,870,,870,Mobil Penumpang,Roda 4,Berhasil,Klasifikasi berhasil.
+platmerah.jpg,8,,8,Mobil Penumpang,Roda 4,Berhasil,Klasifikasi berhasil.
+platkuning5.png,7,,7,Mobil Penumpang,Roda 4,Berhasil,Klasifikasi berhasil.
+plathitam1.jpg,488,,488,Mobil Penumpang,Roda 4,Berhasil,Klasifikasi berhasil.

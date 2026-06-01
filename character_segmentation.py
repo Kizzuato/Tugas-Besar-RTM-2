@@ -48,17 +48,18 @@ def filter_character_contours(contours, plate_shape):
         aspect_ratio = w / float(h)
         area = cv.contourArea(c)
         
-        # HEURISTIK DIGIT (DILONGGARKAN UNTUK MEMASTIKAN SEMUA ANGKA TERTANGKAP)
-        # Tinggi minimal diturunkan ke 15% untuk menangkap angka yang mungkin terdistorsi
-        if h > plate_h * 0.15 and h < plate_h * 0.95:
-            # Aspect ratio fleksibel (0.1 - 0.9)
+        # HEURISTIK DIGIT (DIPERKETAT KEMBALI)
+        # Tinggi minimal 30% untuk menghindari deteksi noise kecil
+        if h > plate_h * 0.30 and h < plate_h * 0.95:
+            # Aspect ratio fleksibel (0.1 - 0.9) - menghindari objek terlalu lebar/tipis
             if 0.1 <= aspect_ratio <= 0.9: 
-                if area > 10 and w >= 3:
-                    # Ambil hampir seluruh lebar plat (5% - 95%)
+                # Area minimal disesuaikan agar tidak menangkap noise kecil
+                if area > 100 and w >= 5:
+                    # Ambil lebar plat yang lebih relevan
                     x_rel = x / plate_w
                     if 0.05 <= x_rel <= 0.95: 
-                        # Filter posisi Y (longgar: 85%)
-                        if y < plate_h * 0.85:
+                        # Filter posisi Y (lebih ketat)
+                        if y < plate_h * 0.90:
                             filtered_contours.append(c)
                     
     return filtered_contours
