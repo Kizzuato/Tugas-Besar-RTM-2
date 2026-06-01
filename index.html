@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Visual PCD Klasifikasi Plat Kendaraan</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">PCD</span>
+        <div>
+          <p class="eyebrow">Klasifikasi Plat Kendaraan</p>
+          <h1>Visual Pipeline Pemrosesan Citra Digital</h1>
+        </div>
+      </div>
+      <div class="status-pill" id="appStatus">Siap memproses citra</div>
+    </header>
+
+    <main class="layout">
+      <section class="workspace">
+        <div class="toolbar">
+          <label class="upload-button" for="imageInput">Pilih Gambar</label>
+          <input id="imageInput" type="file" accept="image/*">
+          <select id="sampleSelect" aria-label="Pilih gambar contoh">
+            <option value="">Gambar contoh</option>
+            <option value="data/plathitam1.jpg">Plat hitam</option>
+            <option value="data/platkuning5.png">Plat kuning</option>
+            <option value="data/platmerah.jpg">Plat merah</option>
+            <option value="data/plathijau.png">Plat hijau</option>
+            <option value="data/mobil_sipil.png">Mobil sipil</option>
+            <option value="data/mobil_sipil2.png">Mobil sipil 2</option>
+          </select>
+          <button id="runButton" type="button">Alur 1: Klasifikasi</button>
+          <button id="extractButton" type="button">Alur 2: Ekstrak Karakter</button>
+          <button id="resetButton" type="button" class="secondary">Reset</button>
+        </div>
+
+        <div class="workflow-switch" aria-label="Status alur kerja">
+          <div class="workflow-step active" data-flow="classification">
+            <strong>Alur 1</strong>
+            <span>Deteksi area plat, analisis warna, dan klasifikasi registrasi.</span>
+          </div>
+          <div class="workflow-step" data-flow="extraction">
+            <strong>Alur 2</strong>
+            <span>Crop plat, binarisasi karakter, komponen terhubung, dan template matching manual.</span>
+          </div>
+        </div>
+
+        <div class="canvas-shell">
+          <canvas id="mainCanvas" width="960" height="540"></canvas>
+          <div class="empty-state" id="emptyState">
+            <strong>Masukkan citra kendaraan atau plat</strong>
+            <span>Area ini akan menampilkan bounding box kandidat plat dan hasil visual PCD.</span>
+          </div>
+        </div>
+
+        <div class="stage-grid" aria-label="Tahapan pemrosesan citra">
+          <article class="stage-card active" data-stage="original">
+            <div class="stage-head">
+              <span>01</span>
+              <h2>Citra Asli</h2>
+            </div>
+            <canvas id="originalCanvas" width="320" height="180"></canvas>
+          </article>
+          <article class="stage-card" data-stage="normalized">
+            <div class="stage-head">
+              <span>02</span>
+              <h2>Normalisasi</h2>
+            </div>
+            <canvas id="normalizedCanvas" width="320" height="180"></canvas>
+          </article>
+          <article class="stage-card" data-stage="gray">
+            <div class="stage-head">
+              <span>03</span>
+              <h2>Grayscale</h2>
+            </div>
+            <canvas id="grayCanvas" width="320" height="180"></canvas>
+          </article>
+          <article class="stage-card" data-stage="threshold">
+            <div class="stage-head">
+              <span>04</span>
+              <h2>Threshold Otsu</h2>
+            </div>
+            <canvas id="thresholdCanvas" width="320" height="180"></canvas>
+          </article>
+          <article class="stage-card" data-stage="edge">
+            <div class="stage-head">
+              <span>05</span>
+              <h2>Edge Visual</h2>
+            </div>
+            <canvas id="edgeCanvas" width="320" height="180"></canvas>
+          </article>
+          <article class="stage-card" data-stage="crop">
+            <div class="stage-head">
+              <span>06</span>
+              <h2>Crop Plat</h2>
+            </div>
+            <canvas id="cropCanvas" width="320" height="180"></canvas>
+          </article>
+        </div>
+
+        <section class="character-workbench">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Alur 2</p>
+              <h2>Ekstraksi Angka dan Huruf dari Plat</h2>
+            </div>
+            <span id="charStatus">Menunggu crop plat</span>
+          </div>
+          <div class="character-strip" id="characterStrip" aria-label="Hasil potongan karakter">
+            <div class="strip-empty">Karakter hasil segmentasi akan muncul di sini.</div>
+          </div>
+        </section>
+      </section>
+
+      <aside class="panel">
+        <section class="result-box">
+          <p class="eyebrow">Hasil Analisis</p>
+          <h2 id="plateClass">Belum ada citra</h2>
+          <div class="metric-list">
+            <div>
+              <span>Warna dominan plat</span>
+              <strong id="dominantColor">-</strong>
+            </div>
+            <div>
+              <span>Kandidat area plat</span>
+              <strong id="plateArea">-</strong>
+            </div>
+            <div>
+              <span>Ambang Otsu</span>
+              <strong id="otsuValue">-</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="result-box">
+          <p class="eyebrow">Ekstraksi Karakter</p>
+          <h2 id="detectedText">-</h2>
+          <div class="metric-list">
+            <div>
+              <span>Huruf terbaca</span>
+              <strong id="detectedLetters">-</strong>
+            </div>
+            <div>
+              <span>Angka terbaca</span>
+              <strong id="detectedDigits">-</strong>
+            </div>
+            <div>
+              <span>Jumlah kandidat</span>
+              <strong id="characterCount">-</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="rule-box">
+          <p class="eyebrow">Klasifikasi Registrasi</p>
+          <div class="plate-inputs">
+            <input id="regionInput" maxlength="2" placeholder="B" aria-label="Kode wilayah">
+            <input id="numberInput" inputmode="numeric" maxlength="4" placeholder="2534" aria-label="Nomor registrasi">
+          </div>
+          <button id="classifyButton" type="button">Klasifikasi Nomor</button>
+          <div class="classification-output">
+            <div>
+              <span>Jenis kendaraan</span>
+              <strong id="vehicleType">-</strong>
+            </div>
+            <div>
+              <span>Kategori roda</span>
+              <strong id="wheelType">-</strong>
+            </div>
+            <div>
+              <span>Aturan</span>
+              <strong id="ruleUsed">-</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="method-box">
+          <p class="eyebrow">Metode Alur 1</p>
+          <ol>
+            <li>Normalisasi kontras min-max untuk menstabilkan pencahayaan.</li>
+            <li>Grayscale berbobot luminance, lalu threshold Otsu dari histogram 256-bin.</li>
+            <li>Canny edge sebagai pembanding visual bentuk tepi.</li>
+            <li>Kandidat plat dipilih dari komponen terhubung dengan filter rasio, ukuran, dan skor tepi.</li>
+          </ol>
+        </section>
+
+        <section class="method-box">
+          <p class="eyebrow">Metode Alur 2</p>
+          <ol>
+            <li>Crop plat dari alur 1 diproses ulang menjadi grayscale dan threshold adaptif polaritas.</li>
+            <li>Foreground karakter dibuat putih, lalu noise kecil dibuang memakai filter komponen.</li>
+            <li>Setiap karakter dipotong dari bounding box, dinormalisasi ke 30 x 50 piksel.</li>
+            <li>Pengenalan memakai LBP manual dan template matching Chi-Square di Python, tanpa OCR siap pakai.</li>
+          </ol>
+        </section>
+      </aside>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>

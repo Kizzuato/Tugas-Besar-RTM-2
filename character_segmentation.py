@@ -23,8 +23,8 @@ def preprocess_plate_for_characters(plate_img):
     # Morphology untuk membersihkan noise kecil dan memperjelas karakter
     kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
     morph = cv.morphologyEx(thresh, cv.MORPH_OPEN, kernel, iterations=1)
-    # Tambahkan closing sedikit jika karakter terputus
-    # morph = cv.morphologyEx(morph, cv.MORPH_CLOSE, kernel, iterations=1)
+    # Tambahkan closing untuk menyambung karakter yang terputus dan menutup lubang kecil
+    morph = cv.morphologyEx(morph, cv.MORPH_CLOSE, kernel, iterations=1)
     
     return morph
 
@@ -88,15 +88,15 @@ def segment_characters(plate_img):
     for c in sorted_contours:
         x, y, w, h = cv.boundingRect(c)
         
-        # Pad area bounding box dengan sedikit margin agar utuh
-        pad_y = 2
-        pad_x = 2
-        y1 = max(0, y - pad_y)
-        y2 = min(thresh.shape[0], y + h + pad_y)
-        x1 = max(0, x - pad_x)
-        x2 = min(thresh.shape[1], x + w + pad_x)
+        # Padding lebih besar (4px) agar karakter tidak terpotong ketat
+        pad = 4
+        y1 = max(0, y - pad)
+        y2 = min(thresh.shape[0], y + h + pad)
+        x1 = max(0, x - pad)
+        x2 = min(thresh.shape[1], x + w + pad)
         
         char_img = thresh[y1:y2, x1:x2]
+
         norm_char = normalize_character_image(char_img)
         characters.append((norm_char, (x, y, w, h)))
         
