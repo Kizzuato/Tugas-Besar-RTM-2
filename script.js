@@ -5,7 +5,12 @@ const canvases = {
   gray: document.getElementById("grayCanvas"),
   threshold: document.getElementById("thresholdCanvas"),
   edge: document.getElementById("edgeCanvas"),
-  crop: document.getElementById("cropCanvas")
+  crop: document.getElementById("cropCanvas"),
+  char_gray: document.getElementById("charGrayCanvas"),
+  char_sharpen: document.getElementById("charSharpenCanvas"),
+  char_thresh_raw: document.getElementById("charThreshRawCanvas"),
+  char_polarity: document.getElementById("charPolarityCanvas"),
+  char_morph: document.getElementById("charMorphCanvas")
 };
 
 const els = {
@@ -94,6 +99,13 @@ function renderResult(payload, flow) {
   drawImage(canvases.threshold, payload.images.threshold);
   drawImage(canvases.edge, payload.images.edge);
   drawImage(canvases.crop, payload.images.crop);
+  
+  // Alur 2 Stages
+  drawImage(canvases.char_gray, payload.images.char_gray);
+  drawImage(canvases.char_sharpen, payload.images.char_sharpen);
+  drawImage(canvases.char_thresh_raw, payload.images.char_thresh_raw);
+  drawImage(canvases.char_polarity, payload.images.char_polarity);
+  drawImage(canvases.char_morph, payload.images.char_morph);
 
   els.plateClass.textContent = payload.analysis.plate_class || "-";
   els.dominantColor.textContent = payload.analysis.dominant_color || "-";
@@ -102,8 +114,14 @@ function renderResult(payload, flow) {
 
   renderRecognition(payload.recognition);
   renderClassification(payload.classification);
-  setActiveStage(flow === "extraction" ? "crop" : "threshold");
+  
+  if (flow === "extraction") {
+    setActiveStage("char_morph");
+  } else {
+    setActiveStage("threshold");
+  }
 }
+
 
 function drawImage(canvas, src) {
   const ctx = canvas.getContext("2d");

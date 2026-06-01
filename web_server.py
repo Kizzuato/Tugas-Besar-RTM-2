@@ -135,8 +135,8 @@ def process_image(image, flow="classification"):
     main_overlay = draw_plate_overlay(source, plate_box, plate_label)
 
     # Perform character extraction
-    characters, char_threshold = segment_characters(plate_crop)
-    recognition = recognize_plate_characters(characters, include_letters=True)
+    characters, char_threshold, char_stages = segment_characters(plate_crop)
+    recognition = recognize_plate_characters(characters, plate_bbox=plate_box, include_letters=False)
     details = recognition.get("details", []) if recognition.get("success") else []
     
     # Overlay logic: only show boxes if extraction flow is active
@@ -175,6 +175,12 @@ def process_image(image, flow="classification"):
             "edge": encode_image(edge),
             "crop": encode_image(plate_crop),
             "character_threshold": encode_image(char_threshold),
+            # Alur 2 Stages
+            "char_gray": encode_image(char_stages.get("char_gray")),
+            "char_sharpen": encode_image(char_stages.get("char_sharpen")),
+            "char_thresh_raw": encode_image(char_stages.get("char_thresh_raw")),
+            "char_polarity": encode_image(char_stages.get("char_polarity")),
+            "char_morph": encode_image(char_stages.get("char_morph")),
         },
         "analysis": {
             "plate_class": plate_label,

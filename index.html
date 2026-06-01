@@ -101,18 +101,42 @@
           </article>
         </div>
 
-        <section class="character-workbench">
+        <div class="character-workbench">
           <div class="section-head">
             <div>
               <p class="eyebrow">Alur 2</p>
-              <h2>Ekstraksi Angka dan Huruf dari Plat</h2>
+              <h2>Ekstraksi Angka dari Plat</h2>
             </div>
             <span id="charStatus">Menunggu crop plat</span>
           </div>
+
+          <div class="stage-grid" aria-label="Tahapan segmentasi karakter">
+            <article class="stage-card" data-stage="char_gray">
+              <div class="stage-head"><span>01</span><h2>Gray Crop</h2></div>
+              <canvas id="charGrayCanvas" width="240" height="80"></canvas>
+            </article>
+            <article class="stage-card" data-stage="char_sharpen">
+              <div class="stage-head"><span>02</span><h2>Sharpen</h2></div>
+              <canvas id="charSharpenCanvas" width="240" height="80"></canvas>
+            </article>
+            <article class="stage-card" data-stage="char_thresh_raw">
+              <div class="stage-head"><span>03</span><h2>Otsu Raw</h2></div>
+              <canvas id="charThreshRawCanvas" width="240" height="80"></canvas>
+            </article>
+            <article class="stage-card" data-stage="char_polarity">
+              <div class="stage-head"><span>04</span><h2>Polarity</h2></div>
+              <canvas id="charPolarityCanvas" width="240" height="80"></canvas>
+            </article>
+            <article class="stage-card" data-stage="char_morph">
+              <div class="stage-head"><span>05</span><h2>Morphology</h2></div>
+              <canvas id="charMorphCanvas" width="240" height="80"></canvas>
+            </article>
+          </div>
+
           <div class="character-strip" id="characterStrip" aria-label="Hasil potongan karakter">
             <div class="strip-empty">Karakter hasil segmentasi akan muncul di sini.</div>
           </div>
-        </section>
+        </div>
       </section>
 
       <aside class="panel">
@@ -188,12 +212,22 @@
         </section>
 
         <section class="method-box">
-          <p class="eyebrow">Metode Alur 2</p>
+          <p class="eyebrow">Metode Alur 2 (Fokus Angka)</p>
           <ol>
-            <li>Crop plat dari alur 1 diproses ulang menjadi grayscale dan threshold adaptif polaritas.</li>
-            <li>Foreground karakter dibuat putih, lalu noise kecil dibuang memakai filter komponen.</li>
-            <li>Setiap karakter dipotong dari bounding box, dinormalisasi ke 30 x 50 piksel.</li>
-            <li>Pengenalan memakai LBP manual dan template matching Chi-Square di Python, tanpa OCR siap pakai.</li>
+            <li><strong>Preprocessing Khusus:</strong> Konversi grayscale, filter penajaman (sharpening kernel), dan blur ringan untuk mempertegas tepi angka.</li>
+            <li><strong>Deteksi Polaritas Otomatis:</strong> Threshold Otsu + analisis dominansi piksel untuk memastikan teks selalu putih di atas latar hitam, adaptif untuk plat hitam maupun putih.</li>
+            <li><strong>Segmentasi Surgikal & Zonasi:</strong>
+              <ul>
+                <li><strong>Cluster Zoning:</strong> Membuang area 18% kiri dan 18% kanan plat secara fisik untuk eliminasi huruf kode wilayah dan seri.</li>
+                <li><strong>Filter Rasio Aspek:</strong> Hanya menerima kontur ramping (0.15 - 0.55) khas angka plat Indonesia.</li>
+              </ul>
+            </li>
+            <li><strong>Pengenalan & Verifikasi Topologi:</strong>
+              <ul>
+                <li><strong>Normalized Correlation:</strong> Template Matching (TM_CCOEFF_NORMED) untuk akurasi bentuk piksel tinggi.</li>
+                <li><strong>Hole Counting:</strong> Verifikasi jumlah lubang internal (misal: angka 8 wajib 2 lubang) untuk mencegah salah baca huruf.</li>
+              </ul>
+            </li>
           </ol>
         </section>
       </aside>

@@ -4,29 +4,40 @@ import os
 
 def preprocess_plate_for_characters(plate_img):
     if plate_img is None:
-        return None
+        return None, {}
     
-    # Konversi ke grayscale
+    stages = {}
+    
+    # 1. Grayscale
     gray = cv.cvtColor(plate_img, cv.COLOR_BGR2GRAY)
+    stages["char_gray"] = gray.copy()
     
-    # Blur ringan untuk mengurangi noise (noise reduksi)
-    blur = cv.GaussianBlur(gray, (5, 5), 0)
+    # 2. Sharpening
+    kernel_sharpen = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
+    sharpened = cv.filter2D(gray, -1, kernel_sharpen)
+    stages["char_sharpen"] = sharpened.copy()
     
-    # Analisis kecerahan untuk memastikan karakter selalu foreground putih
-    mean_val = np.mean(gray)
-    if mean_val > 127: # Plat warna terang (misal putih, teks hitam)
-        # Gunakan Inverse agar teks hitam menjadi putih
-        _, thresh = cv.threshold(blur, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)
-    else: # Plat warna gelap (misal hitam, teks putih)
-        _, thresh = cv.threshold(blur, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+    # 3. Blur
+    blur = cv.GaussianBlur(sharpened, (3, 3), 0)
+    
+    # 4. Otsu Threshold
+    _, thresh = cv.threshold(blur, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+    stages["char_thresh_raw"] = thresh.copy()
+    
+    # 5. Polarity Correction
+    white_pixels = cv.countNonZero(thresh)
+    total_pixels = thresh.shape[0] * thresh.shape[1]
+    if white_pixels > total_pixels / 2:
+        thresh = cv.bitwise_not(thresh)
+    stages["char_polarity"] = thresh.copy()
         
-    # Morphology untuk membersihkan noise kecil dan memperjelas karakter
+    # 6. Morphology (Gunakan kernel 3x3 agar karakter yang terputus menyambung)
     kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
     morph = cv.morphologyEx(thresh, cv.MORPH_OPEN, kernel, iterations=1)
-    # Tambahkan closing untuk menyambung karakter yang terputus dan menutup lubang kecil
     morph = cv.morphologyEx(morph, cv.MORPH_CLOSE, kernel, iterations=1)
+    stages["char_morph"] = morph.copy()
     
-    return morph
+    return morph, stages
 
 def filter_character_contours(contours, plate_shape):
     plate_h, plate_w = plate_shape[:2]
@@ -37,16 +48,18 @@ def filter_character_contours(contours, plate_shape):
         aspect_ratio = w / float(h)
         area = cv.contourArea(c)
         
-        # Heuristik bentuk karakter (huruf/angka) pada plat:
-        # 1. Tinggi karakter tidak mungkin selebar plat atau setinggi keseluruhan plat
-        #    Tingginya biasanya berkisar 35% sampai 95% dari tinggi crop plat.
-        # 2. Rasio aspek (lebar/tinggi). Karakter biasa (0.2 hingga 1.0).
-        # 3. Luasan minimum menghindari noise titik.
-        
-        if h > plate_h * 0.35 and h < plate_h * 0.95:
-            if 0.1 < aspect_ratio < 1.1: # Angka 1 sangat ramping (aspect_ratio kecil)
-                if area > 40:
-                    filtered_contours.append(c)
+        # HEURISTIK DIGIT (DILONGGARKAN UNTUK MEMASTIKAN SEMUA ANGKA TERTANGKAP)
+        # Tinggi minimal diturunkan ke 15% untuk menangkap angka yang mungkin terdistorsi
+        if h > plate_h * 0.15 and h < plate_h * 0.95:
+            # Aspect ratio fleksibel (0.1 - 0.9)
+            if 0.1 <= aspect_ratio <= 0.9: 
+                if area > 10 and w >= 3:
+                    # Ambil hampir seluruh lebar plat (5% - 95%)
+                    x_rel = x / plate_w
+                    if 0.05 <= x_rel <= 0.95: 
+                        # Filter posisi Y (longgar: 85%)
+                        if y < plate_h * 0.85:
+                            filtered_contours.append(c)
                     
     return filtered_contours
 
@@ -62,20 +75,43 @@ def normalize_character_image(image, size=(30, 50)):
     if image is None:
         return None
     
-    # Resize langsung ke ukuran tetap (30x50 misalnya) sesuai standar
-    resized = cv.resize(image, size, interpolation=cv.INTER_AREA)
-    
-    # Binarisasi ulang untuk memastikan citra tetap tajam dan bersih
-    _, binarized = cv.threshold(resized, 127, 255, cv.THRESH_BINARY)
-    return binarized
+    target_w, target_h = size
+    h, w = image.shape[:2]
+    if h == 0 or w == 0:
+        return None
+
+    # Binarisasi dulu di resolusi asli
+    _, binary = cv.threshold(image, 127, 255, cv.THRESH_BINARY)
+
+    # Cari bounding box konten (trim whitespace)
+    coords = cv.findNonZero(binary)
+    if coords is None:
+        return np.zeros((target_h, target_w), dtype=np.uint8)
+    bx, by, bw, bh = cv.boundingRect(coords)
+    cropped = binary[by:by+bh, bx:bx+bw]
+
+    # Scale agar muat di canvas sambil menjaga rasio aspek (85% area)
+    scale = min(target_w / max(bw, 1), target_h / max(bh, 1)) * 0.85
+    new_w = max(1, int(bw * scale))
+    new_h = max(1, int(bh * scale))
+    resized = cv.resize(cropped, (new_w, new_h), interpolation=cv.INTER_AREA)
+
+    # Buat canvas dan center
+    canvas = np.zeros((target_h, target_w), dtype=np.uint8)
+    x_off = (target_w - new_w) // 2
+    y_off = (target_h - new_h) // 2
+    canvas[y_off:y_off+new_h, x_off:x_off+new_w] = resized
+
+    _, result = cv.threshold(canvas, 127, 255, cv.THRESH_BINARY)
+    return result
 
 def segment_characters(plate_img):
     if plate_img is None:
-        return [], None
+        return [], None, {}
         
-    thresh = preprocess_plate_for_characters(plate_img)
+    thresh, stages = preprocess_plate_for_characters(plate_img)
     if thresh is None:
-        return [], None
+        return [], None, {}
         
     # Cari kontur (menggunakan RETR_EXTERNAL agar hanya kontur luar)
     contours, _ = cv.findContours(thresh, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
@@ -100,7 +136,7 @@ def segment_characters(plate_img):
         norm_char = normalize_character_image(char_img)
         characters.append((norm_char, (x, y, w, h)))
         
-    return characters, thresh
+    return characters, thresh, stages
 
 def save_segmented_characters(characters, output_dir="output/characters"):
     if not characters:
