@@ -55,9 +55,9 @@ def filter_character_contours(contours, plate_shape):
             if 0.1 <= aspect_ratio <= 0.9: 
                 # Area minimal disesuaikan agar tidak menangkap noise kecil
                 if area > 100 and w >= 5:
-                    # Ambil lebar plat yang lebih relevan
+                    # Ambil lebar plat yang lebih relevan (Tengah saja: 15% - 85%)
                     x_rel = x / plate_w
-                    if 0.05 <= x_rel <= 0.95: 
+                    if 0.15 <= x_rel <= 0.85: 
                         # Filter posisi Y (lebih ketat)
                         if y < plate_h * 0.90:
                             filtered_contours.append(c)
